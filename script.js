@@ -7,41 +7,52 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let clocks = new Array(3).fill(null);
 
+    // Helper function to populate dropdowns
+    function populateDropdowns(timezones) {
+        selectors.forEach(selectorId => {
+            const selector = document.getElementById(selectorId);
+            if (!selector) return;
+
+            selector.innerHTML = ''; // Clear existing options
+            timezones.forEach(tz => {
+                const option = document.createElement('option');
+                option.value = tz;
+                const displayName = tz.replace(/_/g, ' ').split('/').pop();
+                option.textContent = displayName;
+                selector.appendChild(option);
+            });
+        });
+    }
+
     async function populateSelectors() {
+        const fallbackTimezones = [
+            'America/New_York',
+            'Europe/London',
+            'Asia/Tokyo',
+            'Australia/Sydney',
+            'Asia/Kolkata',
+            'America/Los_Angeles',
+            'Europe/Paris',
+            'Asia/Dubai'
+        ];
+
         try {
             const response = await fetch(API_BASE_URL);
-            if (!response.ok) throw new Error('Failed to fetch timezones');
+            if (!response.ok) throw new Error('Failed to fetch timezones from API');
             const timezones = await response.json();
-
-            selectors.forEach(selectorId => {
-                const selector = document.getElementById(selectorId);
-                if (!selector) return;
-
-                // Clear any existing options
-                selector.innerHTML = '';
-
-                timezones.forEach(tz => {
-                    const option = document.createElement('option');
-                    option.value = tz;
-                    // Try to create a more readable name
-                    const displayName = tz.replace(/_/g, ' ').split('/').pop();
-                    option.textContent = displayName;
-                    selector.appendChild(option);
-                });
-            });
-
-            // Set default values after populating
-            document.getElementById('country1').value = 'Asia/Kolkata';
-            document.getElementById('country2').value = 'America/New_York';
-            document.getElementById('country3').value = 'Europe/London';
-
-            // Initialize clocks after setting defaults
-            initializeClocks();
-
+            populateDropdowns(timezones);
         } catch (error) {
-            console.error('Error populating selectors:', error);
-            // Handle error in UI, maybe show a message
+            console.error('Error populating selectors from API:', error);
+            console.log('Using fallback timezone list.');
+            populateDropdowns(fallbackTimezones);
         }
+
+        // This part runs regardless of whether the API call succeeded or failed
+        document.getElementById('country1').value = 'Asia/Kolkata';
+        document.getElementById('country2').value = 'America/New_York';
+        document.getElementById('country3').value = 'Europe/London';
+
+        initializeClocks();
     }
 
     async function fetchTime(timezone, index) {
@@ -65,7 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if(timeDisplay) {
                 timeDisplay.textContent = "Error";
             }
-            clocks[index] = null; // Clear clock data on error
+            clocks[index] = null;
         }
     }
 
@@ -111,24 +122,20 @@ document.addEventListener('DOMContentLoaded', () => {
             const sourceClock = clocks[index];
             if (!sourceClock) return;
 
-            // Get the date part from the currently displayed time for that clock
             const currentDate = new Date(sourceClock.serverTimeAtFetch.getTime() + (Date.now() - sourceClock.localTimeAtFetch));
             const year = currentDate.getFullYear();
             const month = String(currentDate.getMonth() + 1).padStart(2, '0');
             const day = String(currentDate.getDate()).padStart(2, '0');
 
-            // Construct an ISO 8601 string with the correct offset for the source timezone
             const isoString = `${year}-${month}-${day}T${sourceTimeValue}:00${sourceClock.utcOffset}`;
             const sourceUTCTime = new Date(isoString);
 
-            if (isNaN(sourceUTCTime)) return; // Invalid date created
+            if (isNaN(sourceUTCTime)) return;
 
-            // Convert this universal time to each of the other clocks' timezones
             clocks.forEach((targetClock, targetIndex) => {
                 if (index !== targetIndex && targetClock) {
                     const targetInput = document.getElementById(timeInputs[targetIndex]);
                     if (targetInput) {
-                        // Use Intl.DateTimeFormat for robust timezone conversions
                         const formatter = new Intl.DateTimeFormat('en-GB', {
                             timeZone: targetClock.timezone,
                             hour: '2-digit',
